@@ -1,0 +1,6 @@
+Nombre	Apellidos	Edad	Mascota
+Pablo	Corral Fernández	4\Diego
+Ruth	Díaz Jiménez	21	Coca
+Nombre	Apellidos	Edad	Mascota
+Pablo	Corral Fernández	4	Diego
+Ruth	Díaz Jiménez	21	Coca
