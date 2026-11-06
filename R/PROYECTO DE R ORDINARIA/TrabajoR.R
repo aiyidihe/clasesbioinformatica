@@ -1,0 +1,174 @@
+#TRABAJO ORDINARIA DE R. 
+#SOY AIYI DIAZ NP 155190. GBME401.1. HE DECIDDO HACER TODO EL CODIGO SEGUIDO E IR ANOTANDO CADA EJERCICIO PORQUE SI NO ES UN CAOS. 
+#Van todos seguidos asi que sobre el último se ejecuta el código desde el principio, para no ponerlo 7 veces. 
+
+#EJERCICIO 1: 
+### 1.- Carga el archivo de entrada "archivo-entrada.txt" correspondiente. Recuerda incluir los nombres de las columnas como el encabezado.
+### Examina el archivo con las funciones head(), tail() y dim(). (1 pto)
+col_control   <- "steelblue"
+col_condicion <- "tomato"
+
+tabla <- read.table("archivo-entrada.txt",
+                    header = TRUE,
+                    sep = "\t",
+                    check.names = FALSE,   # sin row.names: "Gene Name" queda como columna
+                    quote = "",
+                    comment.char = "")
+
+head(tabla) #si se ejecuta se ve la tabla tal cual. 
+tail(tabla)
+dim(tabla)
+
+#EJERCICIO 2:  
+### 2.- En nuestra tabla tenemos los valores de 619 genes para tres réplicas del Control y tres réplicas de una Condición. Calcula la media y la desviación
+### estándar del control y del tratamiento para cada gen. Puedes emplear cualquier
+### función que consideres como apply(). Añade esos valores como columnas nuevas a tu tabla original. 
+### Serán 4 columnas nuevas en total, la media de Control, la DE de Control, la media de Condición y la DE de Condición. (1,5 pto)
+# Qué columnas son Control y cuáles Condición
+
+# Columnas de datos (la 1 es "Gene Name")
+idx_control   <- 2:4   # C2, C1, C3
+idx_condicion <- 5:7   # 1W5-TPM, 1W6-TPM, 1W5-COV
+
+# Añadimos 4 columnas nuevas (las que nos piden en el enunciado)
+tabla$Media_Control   <- apply(tabla[, idx_control],   1, mean)
+tabla$DE_Control      <- apply(tabla[, idx_control],   1, sd)
+tabla$Media_Condicion <- apply(tabla[, idx_condicion], 1, mean)
+tabla$DE_Condicion    <- apply(tabla[, idx_condicion], 1, sd)
+
+head(tabla)
+dim(tabla)
+
+#EJERCICIO 3: 
+#En una sola imagen, muestra un histograma para la media del Control y otro para la media de la Condicíon. 
+### Pon colores diferentes en cada uno y mantén esos colores para el resto del trabajo. (1 pto).
+
+# Se usa log2(x+1) para reducir el rango de los datos y los mismos intervalos
+# (breaks) en ambos histogramas para poder compararlos. Más intervalos dan
+# barras más estrechas y se aprecia mejor la distribución.
+
+# Escala log2(x+1): unos pocos genes muy expresados estiraban el eje
+# y casi todos los genes caían en una sola barra
+log_control   <- log2(tabla$Media_Control + 1)
+log_condicion <- log2(tabla$Media_Condicion + 1)
+
+# Establecemos los mismos intervalos para ambos histogramas
+intervalos <- pretty(range(c(log_control, log_condicion)), n = 30)
+
+par(mfrow = c(1, 2))   # una sola imagen con dos gráficos
+
+hist(log_control,
+     breaks = intervalos,
+     col = col_control, border = "white",
+     main = "Media del Control",
+     xlab = "log2(Expresión media + 1)", ylab = "Frecuencia")
+
+hist(log_condicion,
+     breaks = intervalos,
+     col = col_condicion, border = "white",
+     main = "Media de la Condición",
+     xlab = "log2(Expresión media + 1)", ylab = "Frecuencia")
+
+par(mfrow = c(1, 1))   # vuelve al modo normal (1 gráfico)
+
+#EJERCICIO 4: 
+### 4.- En una sola imagen, muestra un boxplot para la condición y otro para el control. 
+### Añade el título, colores y una una leyenda en la esquina superior izquierda. ( 1,5 pto)
+# Usamos los mismos datos que en el ejercicio 3 (medias por gen en log2(x+1))
+boxplot(log_control, log_condicion,
+        names = c("Control", "Condición"),
+        col = c(col_control, col_condicion),
+        main = "Expresión génica: Control vs Condición",
+        ylab = "log2(Expresión media + 1)")
+
+legend("topleft",
+       legend = c("Control", "Condición"),
+       fill = c(col_control, col_condicion),
+       bty = "n")
+
+#EJERCICIO 5: 
+### 5.- Evalúa la normalidad de Control y Condición y acorde con los resultados, haz lo siguiente: (2 pto)
+### 		Realiza un test de comparativa de medias para cada gen entre condición y control. 
+###			Guarda el p-value de la comparativa y anádelo como una columna extra a tu tabla original.
+
+tabla$pvalue <- NULL   # evita duplicar la columna si lo ejecutas dos veces
+
+# 5.1) Normalidad de Control y Condición (Shapiro-Wilk)
+shapiro_control   <- shapiro.test(tabla$Media_Control)
+shapiro_condicion <- shapiro.test(tabla$Media_Condicion)
+shapiro_control
+shapiro_condicion
+
+normal <- shapiro_control$p.value > 0.05 & shapiro_condicion$p.value > 0.05
+
+# 5.2) Test de comparativa de medias para cada gen
+pvalues <- numeric(nrow(tabla))
+
+for (i in 1:nrow(tabla)) {
+  control   <- as.numeric(tabla[i, c("C2-TPM", "C1-TPM", "C3-TPM")])
+  condicion <- as.numeric(tabla[i, c("1W5-TPM", "1W6-TPM", "1W5-COV")])
+  
+  if (normal) {
+    pvalues[i] <- tryCatch(t.test(control, condicion)$p.value, error = function(e) NA)
+  } else {
+    pvalues[i] <- suppressWarnings(
+      wilcox.test(control, condicion, exact = FALSE, correct = FALSE)$p.value
+    )
+  }
+}
+
+# 5.3) Guardar el p-value como columna extra de la tabla original
+tabla$pvalue <- pvalues
+
+head(tabla)
+dim(tabla)
+summary(tabla$pvalue)
+sum(tabla$pvalue < 0.05, na.rm = TRUE)   # genes con p < 0.05
+
+# Shapiro con p < 0.05 en Control y Condición: los datos no son normales, por lo
+# que se usa el test no paramétrico de Wilcoxon (exact = FALSE porque hay empates
+# y solo 3 réplicas por grupo). El p-value se guarda en la columna "pvalue".
+
+#EJERCICIO 6:
+### 6.- De los resultados del apartado 5, saca (mediante código) un listado de los genes diferencialmente expresados (aquellos que tengan un pvalue < 0.05)
+### ¿Cuántos genes tienes? Sino te sale ninguno, justifica por qué. En caso de que sí que te salgan, ¿cuántos salen sobreexpresados y cuántos reprimidos? (1 pto)  
+genes_de <- tabla[which(tabla$pvalue < 0.05), ]
+
+cat("Genes diferencialmente expresados (p < 0.05):", nrow(genes_de), "\n")
+
+if (nrow(genes_de) > 0) {
+  sobreexpresados <- genes_de[genes_de$Media_Condicion > genes_de$Media_Control, ]
+  reprimidos      <- genes_de[genes_de$Media_Condicion < genes_de$Media_Control, ]
+  cat("Sobreexpresados:", nrow(sobreexpresados), "\n")
+  cat("Reprimidos:     ", nrow(reprimidos), "\n")
+  
+  head(genes_de[, c("Gene Name", "Media_Control", "Media_Condicion", "pvalue")], 20)
+} else {
+  cat("Ningún gen alcanza p < 0.05.\n")
+}
+
+# RESPUESTA 6:
+# Genes diferencialmente expresados (p < 0.05): 468
+# Sobreexpresados (Media_Condicion > Media_Control): 69
+# Reprimidos (Media_Condicion < Media_Control): 399
+
+#EJERCICIO 7: 
+### 7.- Por último, realiza un heatmap de los genes diferencialmente expresados
+### Emplea la Práctica de R como referencia. (2 pts)
+mat <- as.matrix(genes_de[, c(idx_control, idx_condicion)])
+rownames(mat) <- genes_de[["Gene Name"]]
+mat <- log2(mat + 1)
+mat <- mat[apply(mat, 1, sd) > 0, ]   # quita genes sin variación
+
+colores_columnas <- c(rep(col_control, 3), rep(col_condicion, 3))
+
+heatmap(mat,
+        scale = "row",
+        col = colorRampPalette(c("blue", "white", "red"))(100),
+        ColSideColors = colores_columnas,
+        labRow = "",            # con tantos genes, sin nombres para que se vea limpio
+        margins = c(8, 3),
+        main = "Genes diferencialmente expresados (p < 0.05)")
+
+legend("topright", legend = c("Control", "Condición"),
+       fill = c(col_control, col_condicion), bty = "n", cex = 0.8)
